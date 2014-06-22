@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>XAE 1000</title>
+<style>
+
+.form{  
+    margin: 5em auto 3em;  
+    width: 600px;  
+}  
+
+.chart rect {
+  fill: steelblue;
+}
+
+.chart text {
+  fill: red;
+  font: 10px sans-serif;
+  text-anchor: end;
+}
+
+path {
+	stroke: black;
+	stroke-width: 1;
+	fill: none;
+}
+
+#graph1{
+	border: 2px solid;
+    border-radius: 5px;
+	border-color:#EEE;
+}
+
+.grid .tick {
+    stroke: lightgrey;
+    opacity: 0.7;
+}
+.grid path {
+      stroke-width: 0;
+}
+
+.trig {
+      stroke-width: 2px;
+}
+
+.cur {
+      stroke-width: 1px;
+}
+
+dline {
+    stroke: black;
+    stroke-width: 1px;
+}
+
+label
+{
+width: 4em;
+float: left;
+text-align: right;
+margin-right: 0.5em;
+display: block
+}
+
+.input{  
+    border: 1px solid #d0ccc9;  
+    background: #FFC;  
+    color: #5f95ef;  
+    font-size: 11px;  
+    font-weight: 700;  
+    padding-bottom: 2px;  
+}  
+
+.input.text{  
+    font-weight: normal;  
+    color: #565656;  
+    border: 1px solid #9c9c9c;  
+    width: 5px;  
+    padding: 2px;  
+    margin-bottom: 5px;  
+    text-align: left;  
+}  
+
+</style>
+</head>
+
+<body>
+<table width="780" border="0" align="center" cellpadding="0" cellspacing="0">
+<tr>
+<td colspan="2"><img src="xae-header-780-60.png"  alt="" width="780" height="60"  title="XAE 1000 XMOS Analog Examiner" /></td>
+</tr>
+<tr>
+<td width="520" valign="top">
+	<div id="graph1" style="width:500px; height:510px;" ></div>
+</td>
+<td width="280" valign="center" style="color:#333; background-color:#CCF;">
+
+<table>
+<tr><td style="color:#EEE; background-color:#C00;">&nbsp;</td></tr>
+<tr><td>
+	<label for="id_period">Period</label>
+    <input type = "text" value ="" name = "box_period" class="input" id="id_period"><br/>
+    <label for="id_freq">Freq.</label>
+    <input type = "text" value ="" name = "box_freq" class="input" id="id_freq"><br/>
+	<label for="id_marker">Mark</label>
+	<input type="submit" class="button1" value="Erase" id="id_marker" /><br />
+</td></tr>
+
+<tr><td>&nbsp;</td></tr>
+<tr><td style="color:#EEE; background-color:#C00;">&nbsp;</td></tr>
+
+<tr><td>
+	<label for="id_cont">Sweep</label>
+	<input type="submit" class="button1" value="Cont" id="id_cont" />
+    <input type="submit" class="button1" value="Norm" id="id_norm" />
+    <input type="submit" class="button1" value="Sing" id="id_sing" /><br />
+    <label for="id_rise">Trigger</label>
+    <input type="submit" class="button1" value="Rise" id="id_rise" />
+    <input type="submit" class="button1" value="Fall" id="id_fall" /><br />
+    <label for="id_tbval">Time/div</label>
+    <input type = "text" value ="" name = "box_tbval" class="input" id="id_tbval"><br/>
+    <label for="id_tbl">select</label>
+    <input type="submit" class="button1" value="<<" id="id_tbl" />
+    <input type="submit" class="button1" value=">>" id="id_tbr" /><br />
+</td></tr>
+</table>
+    
+</td>
+</tr>
+<tr>
+<td colspan="2"><img src="xae-footer-780-37.png"  alt="" width="780" height="37"  title="" /></td>
+</tr>
+</table>
+
+<script src="http://code.jquery.com/jquery-1.11.1.min.js"></script>
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script src="/socket.io/socket.io.js" type="text/javascript">
+</script>
+<script type="text/javascript">
+
+	var freq_box = document.getElementById("id_freq");
+	var period_box = document.getElementById("id_period");
+	var tb_box = document.getElementById("id_tbval");
+	var cont_button = document.getElementById("id_cont");
+	var norm_button = document.getElementById("id_norm");
+	var sing_button = document.getElementById("id_sing");
+	var rise_button = document.getElementById("id_rise");
+	var fall_button = document.getElementById("id_fall");
+	var tbl_button = document.getElementById("id_tbl");
+	var tbr_button = document.getElementById("id_tbr");
+
+$(document).ready(function() {		
+});
+
+jQuery(document).ready(function() {
+	
+  $("#id_marker").click(function(e){
+    do_erase_marker();
+  });
+  $("#id_cont").click(function(e){
+    do_trigmode(0);
+  });
+  $("#id_norm").click(function(e){
+    do_trigmode(1);
+  });
+  $("#id_sing").click(function(e){
+    do_trigmode(2);
+  });
+  $("#id_rise").click(function(e){
+    do_levelmode(0);
+  });
+  $("#id_fall").click(function(e){
+    do_levelmode(1);
+  });
+  $("#id_tbl").click(function(e){
+    do_tb(0);
+  });
+  $("#id_tbr").click(function(e){
+    do_tb(1);
+  });
+  clear_radio();
+  cont_button.style.background="#66FFFF";
+  
+	
+});
+
+
+
+	
+
+
+var trigmode=0; // continuous
+var triglevel=250;
+var trigdir=0;
+var xc=[250,250];
+var yc=[255,255];
+var nx=0;
+var ny=0;
+var init=0;
+var tbmapu=[10,20,50,100,200,500,1000,2000,5000,10000,20000,50000,100000];
+var tbmap=[" 10 usec",
+           " 20 usec",
+           " 50 usec",
+           "100 usec",
+		   "200 usec",
+		   "500 usec",
+		   "  1 msec",
+		   "  2 msec",
+		   "  5 msec",
+		   " 10 msec",
+		   " 20 msec",
+		   " 50 msec",
+		   "100 msec"];
+var timebase=2; // 50usec
+var queue="";
+var queued=0;
+var lockout=0;
+
+function do_erase_marker()
+{
+  nx=0;
+  ny=0;
+  d3.select("#xc0").remove();
+  d3.select("#xc1").remove();
+  d3.select("#yc0").remove();
+  d3.select("#yc1").remove();
+  $('#id_period').val(" ");
+  $('#id_freq').val(" ");
+}
+
+function clear_radio()
+{
+	cont_button.style.background="#CCCCCC";
+	norm_button.style.background="#CCCCCC";
+	sing_button.style.background="#CCCCCC";
+}
+
+function do_trigmode(v)
+{
+	if ((init) && (queued==0))
+	{
+		queued=1;
+		queue='trigmode '+v;
+		//socket.emit('action', { command: 'trigmode '+v });
+		clear_radio();
+		if (v==0)
+		{
+			cont_button.style.background="#66FFFF";
+		}
+		else if (v==1)
+		{
+			norm_button.style.background="#66FFFF";
+		}
+		else if (v==2)
+		{
+			sing_button.style.background="#66FFFF";
+		}
+		trigmode=v;
+	}
+}
+
+function do_tb(v)
+{
+	if ((init) && (queued==0))
+	{
+		if (v==0) // left click
+		{
+			timebase--;
+			if (timebase<0) timebase=0;
+		}
+		else // right click
+		{
+			timebase++;
+			if (timebase>10) timebase=10;
+		}
+		if (timebase>=2)
+		{
+			queued=1;
+			queue='timebase '+(timebase-2);
+		}
+		tb_box.value=tbmap[timebase];
+	}
+}
+
+function do_levelmode(v)
+{
+	if ((init) && (queued==0))
+	{
+		queued=1;
+		queue='trigdir '+v;
+	 	d3.select("#trigger1").remove();
+    	d3.select("#trigger2").remove();
+    	d3.select("#trigger3").remove();
+    	d3.select("#trigger4").remove();
+		trigdir=v;
+		drawtrigger();
+	}
+}
+
+var width=500;
+var height=510;
+var interpolation="basis";
+
+		var x = d3.scale.linear().domain([0, 500]).range([0, width]);
+		var y = d3.scale.linear().domain([0, 4095]).range([height,0]);
+		var xstretch0 = d3.scale.linear().domain([0, 100]).range([0, width]);
+		var xstretch1 = d3.scale.linear().domain([0, 200]).range([0, width]);
+ 
+		var line = d3.svg.line()
+			.x(function(d,i) { 
+				return x(i); 
+			})
+			.y(function(d) { 
+				return y(d); 
+			})
+			.interpolate(interpolation);
+
+		var line0 = d3.svg.line()
+			.x(function(d,i) { 
+				return xstretch0(i); 
+			})
+			.y(function(d) { 
+				return y(d); 
+			})
+			.interpolate(interpolation);
+			
+		var line1 = d3.svg.line()
+			.x(function(d,i) { 
+				return xstretch1(i); 
+			})
+			.y(function(d) { 
+				return y(d); 
+			})
+			.interpolate(interpolation);
+
+
+// functions to handle cursor drawing
+function drawxc(idx){
+  graph.append("svg:line")
+        .attr("id","xc"+idx)        
+        .attr("class", "cur")
+        .attr(
+		    {
+			    "x1" : xc[idx],
+			    "x2" : xc[idx],
+			    "y1" : 0,
+          "y2" : 510,
+          "fill" : "none",
+          "shape-rendering" : "crispEdges",
+          "stroke" : "pink",
+          "stroke-width" : "1px"
+        });
+};
+
+function drawyc(idx){
+  graph.append("svg:line")
+        .attr("id","yc"+idx)        
+        .attr("class", "cur")
+        .attr(
+		    {
+			    "x1" : 0,
+			    "x2" : 500,
+			    "y1" : yc[idx],
+          "y2" : yc[idx],
+          "fill" : "none",
+          "shape-rendering" : "crispEdges",
+          "stroke" : "pink",
+          "stroke-width" : "1px"
+        });
+};
+// function to draw the trigger level marker
+function drawtrigger(){
+  graph.append("svg:line")
+        .attr("id","trigger1")        
+        .attr("class", "trig")
+        .attr(
+		    {
+			    "x1" : 0,
+			    "x2" : 20,
+			    "y1" : triglevel,
+          "y2" : triglevel,
+          "fill" : "none",
+          "shape-rendering" : "crispEdges",
+          "stroke" : "red",
+          "stroke-width" : "1px"
+        });
+  
+  if (trigdir==0)
+    mul=-1;
+  else
+    mul=1;
+  graph.append("svg:line")
+        .attr("id","trigger2")        
+        .attr("class", "trig")
+        .attr(
+		    {
+			    "x1" : 10,
+			    "x2" : 10,
+			    "y1" : triglevel,
+          "y2" : triglevel+(mul*15),
+          "fill" : "none",
+          "shape-rendering" : "crispEdges",
+          "stroke" : "red",
+          "stroke-width" : "1px"
+        });
+   graph.append("svg:line")
+        .attr("id","trigger3")         
+        .attr("class", "trig")
+        .attr(
+		    {
+			    "x1" : 10,
+			    "x2" : 5,
+			    "y1" : triglevel+(mul*15),
+          "y2" : triglevel+(mul*10),
+          "fill" : "none",
+          "shape-rendering" : "crispEdges",
+          "stroke" : "red",
+          "stroke-width" : "1px"
+        });
+   graph.append("svg:line")
+        .attr("id","trigger4")         
+        .attr("class", "trig")
+        .attr(
+		    {
+			    "x1" : 10,
+			    "x2" : 15,
+			    "y1" : triglevel+(mul*15),
+          "y2" : triglevel+(mul*10),
+          "fill" : "none",
+          "shape-rendering" : "crispEdges",
+          "stroke" : "red",
+          "stroke-width" : "1px"
+        });
+}
+
+
+// determine if the trigger level marker is being adjusted, or if cursor activity is occurring
+function click(){
+  // Ignore the click event if it was suppressed
+  if (d3.event.defaultPrevented) return;
+
+  // Extract the click location    
+  var point = d3.mouse(this)
+  , p = {x: point[0], y: point[1] };
+  
+  mode=0;
+  if (p.y>25)
+    isxc=0;
+  else
+    isxc=1;
+  if (p.x>25)
+    istrig=0;
+  else
+    istrig=1;
+  if (p.x>475)
+    isyc=1;
+  else
+    isyc=0;
+    
+  if ((isxc==0) && (isyc==0) && (istrig==0))
+    return;
+    
+  if (isxc)
+  {
+    if (nx>=2)
+    {
+      d3.select("#xc0").remove();
+      d3.select("#xc1").remove();
+      nx=0;
+    }
+    xc[nx]=p.x;
+    drawxc(nx);
+	if (nx==1)
+	{
+		numdiv=Math.abs(xc[0]-xc[1])/50;
+		peru=tbmapu[timebase]*numdiv;
+		if (peru>1000)
+		{
+			perm=peru/1000;
+			period_box.value=perm.toFixed(2) +" msec";
+		}
+		else
+		{
+			period_box.value=peru.toFixed(2) +" usec";
+		}
+		freqk=(1/peru)*1000;
+		freq_box.value=freqk.toFixed(2)+" kHz";
+	}
+    nx++;
+  }
+  else if (isyc)
+  {
+    if (ny>=2)
+    {
+      d3.select("#yc0").remove();
+      d3.select("#yc1").remove();
+      ny=0;
+    }
+    yc[ny]=p.y;
+    drawyc(ny);
+    ny++;
+  }
+  else if (istrig)
+  {
+	if ((init) && (queued==0))
+	{
+    	triglevel=p.y;
+		triglevel8bit=triglevel/2; // 0-255 value
+		// it is upside down, so subtract from 255
+		triglevel8bit=Math.floor(255-triglevel8bit);
+		queued=1;
+		queue='triglevel '+triglevel8bit;
+    	d3.select("#trigger1").remove();
+    	d3.select("#trigger2").remove();
+    	d3.select("#trigger3").remove();
+    	d3.select("#trigger4").remove();
+       
+    	drawtrigger();
+	}
+  }
+};
+
+tb_box.value=tbmap[timebase];
+// create our graphic objects
+var graph = d3.select("#graph1").append("svg:svg").attr("width", "100%").attr("height", "100%").on("click", click);
+
+// draw horizontal grid lines
+for (gy=51; gy<510; gy=gy+51)
+{
+  if (gy==255)
+    sw="3px"; // fat center
+  else
+    sw="1px";
+  graph.append("svg:line")         
+        .attr("class", "grid")
+        .attr(
+		    {
+			    "x1" : 0,
+			    "x2" : 500,
+			    "y1" : gy,
+          "y2" : gy,
+          "fill" : "none",
+          "shape-rendering" : "crispEdges",
+          "stroke" : "#EEE",
+          "stroke-width" : sw
+        });
+};
+// draw vertical grid lines
+for (gx=50; gx<500; gx=gx+50)
+{
+  if (gx==250)
+    sw="3px"; // fat center
+  else
+    sw="1px";
+  graph.append("svg:line")         
+        .attr("class", "grid")
+        .attr(
+		    {
+			    "x1" : gx,
+			    "x2" : gx,
+			    "y1" : 0,
+          "y2" : 510,
+          "fill" : "none",
+          "shape-rendering" : "crispEdges",
+          "stroke" : "#EEE",
+          "stroke-width" : sw
+        });
+};
+// draw the trigger marker
+drawtrigger();
+
+var socket = io.connect();
+socket.on('status', function (data)
+{
+  if (data.stat=='ready')
+  {
+  	init=1;
+	socket.emit('action', { command: 'sweep' });
+  }
+  
+});
+
+function doaction()
+{
+	queued=0;
+	socket.emit('action', { command: 'sweep' });
+}
+
+// our first data to display
+var data = [0, 0, 0, 0, 0];	
+graph.append("svg:path").attr("d", line(data));
+
+socket.on('results', function(tdata)
+{
+	//var temp = new Array();
+	//alert("Received "+tdata.toString());
+	var temp = tdata.toString().split(",");
+	for (a in temp )
+	{
+		temp[a] = parseInt(temp[a], 16);
+	}
+	tracevalid=1; // assume the trace will be valid
+	// check the header, is the sweep valid?
+	if ((temp[0]==0x80)
+	  &&(temp[1]==0x00)
+	  &&(temp[2]==0x01)
+	  &&(temp[3]==0x99))
+	{
+		// ok this sweep resulted in no trace data.
+		// Most likely the trigger has not occurred.
+		tracevalid=0;
+	}
+	
+	var j=0;
+	if (tracevalid)
+	{
+		for (i=3; i<temp.length; i=i+2)
+		{
+			data[j]=temp[i]*256 + temp[i+1];
+			j++;
+		}
+		if (timebase>=2)
+		{
+			data=data.slice(0, 499);
+			graph.selectAll("path").data([data]).attr("d", line);
+		}
+		else if (timebase==1)
+		{
+			data=data.slice(0, 199);
+			graph.selectAll("path").data([data]).attr("d", line1);
+		}
+		else
+		{
+			data=data.slice(0, 99);
+			graph.selectAll("path").data([data]).attr("d", line0);
+		}
+		
+	}
+	// now grab another sweep
+	if (queued==0)
+	{
+		socket.emit('action', { command: 'sweep' });
+	}
+	else
+	{
+		socket.emit('action', { command: queue });
+		setTimeout(doaction(), 100); // short delay and then lets start the sweeps again
+	}
+});
+
+
+
+</script>
+</body>
+</html>
